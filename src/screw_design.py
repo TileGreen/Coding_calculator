@@ -28,6 +28,7 @@ def design(inp: ScrewInputs = ScrewInputs(), *, k_feed_depth: float = 0.15) -> D
         h_f_mm, h_m_mm      channel depths
         throughput_kg_hr    calculated Q
     """
+    feed_rate_kg_hr: float | None = None
     D_m = inp.D_mm / 1000.0
     theta_deg = _optimum_helix(inp.power_law_index_n)
     h_f_mm, h_m_mm = _channel_depths(inp.D_mm, k_feed_depth, inp.compression_ratio)
@@ -37,10 +38,19 @@ def design(inp: ScrewInputs = ScrewInputs(), *, k_feed_depth: float = 0.15) -> D
     Q_kg_s = (inp.bulk_density * channel_area_m2 *
               inp.screw_speed_rpm / 60.0 * inp.fill_factor)
     Q_kg_hr = Q_kg_s * 3600.0
+    if feed_rate_kg_hr is not None:
+        phi_eff = min(feed_rate_kg_hr / Q_kg_hr, 1.0)
+        Q_actual_hr = phi_eff * Q_kg_hr
+    else:
+        phi_eff = inp.fill_factor          # default (likely 0.9–1.0)
+        Q_actual_hr = Q_kg_hr
+
 
     return {
         "theta_deg": theta_deg,
         "h_f_mm": h_f_mm,
         "h_m_mm": h_m_mm,
-        "throughput_kg_hr": Q_kg_hr,
+        "throughput_max_kg_hr": Q_kg_hr,
+        "fill_factor_eff": phi_eff,
+        "throughput_actual_kg_hr": Q_actual_hr,
     }

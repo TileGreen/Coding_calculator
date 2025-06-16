@@ -1,0 +1,40 @@
+# Example candidates.yaml
+
+# Each entry defines a distinct ScrewInputs configuration. Only the specified fields will override defaults.
+# Mandatory fields: D_mm, L_over_D, compression_ratio, feed_zone_frac, compression_zone_frac, meter_zone_frac
+# Optional fields: power_law_index_n, screw_speed_rpm, bulk_density, fill_factor
+
+- name: "Standard_90mm"
+  D_mm: 90
+  L_over_D: 25
+  compression_ratio: 3.0
+  feed_zone_frac: 0.30
+  compression_zone_frac: 0.20
+  meter_zone_frac: 0.50
+  screw_speed_rpm: 20.0
+  bulk_density: 1150.0
+  fill_factor: 0.60
+
+- name: "Deep_100mm"
+  D_mm: 100
+  L_over_D: 20
+  compression_ratio: 4.0
+  feed_zone_frac: 0.33
+  compression_zone_frac: 0.17
+  meter_zone_frac: 0.50
+  screw_speed_rpm: 25.0
+  bulk_density: 1200.0
+  fill_factor: 0.65
+
+- name: "HighSpeed_80mm"
+  D_mm: 80
+  L_over_D: 25
+  compression_ratio: 2.5
+  feed_zone_frac: 0.28
+  compression_zone_frac: 0.22
+  meter_zone_frac: 0.50
+  screw_speed_rpm: 30.0
+  bulk_density: 1100.0
+  fill_factor: 0.55
+
+
