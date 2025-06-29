@@ -124,10 +124,33 @@ def eta_poly(gdot, *, T: float = 195.0):
     poly, _ = _build_models(float(T))
     return poly(gdot)
 
+#Add low-shear-rate extrapolation
 def eta_spc(gdot, *, T: float = 195.0):
-    """Viscosity of 50 wt % sand composite (Pa·s)."""
     _, spc = _build_models(float(T))
-    return spc(gdot)
+    g = np.asarray(gdot, dtype=float)
+
+    # Carreau–Yasuda core
+    eta = spc(g).copy()
+
+    # --- single, self-consistent low-shear patch (< 1 s⁻¹) --------------
+    low = g < 1.0
+    if np.any(low):
+        # Anchor at 1 and 10 s⁻¹ so slope matches the Carreau curve.
+        g_ref   = np.array([1.0, 10.0])
+        eta_ref = spc(g_ref)
+        n = np.log(eta_ref[0] / eta_ref[1]) / np.log(10.0)     # apparent index
+        eta_low = eta_ref[0] * (np.maximum(g, 0.01) / 1.0) ** (n - 1)
+        eta[low] = eta_low[low]
+
+    return float(eta) if np.isscalar(gdot) else eta
+
+def get_curve_data(T: float = 195.0):
+     """Return (gdot, eta_poly, eta_spc)."""
+     df = pd.read_csv(DATA_CSV, header=None, names=["gdot", "eta_wpc"])
+     g = df["gdot"].values
+     return g, eta_poly(g, T=T), eta_spc(g, T=T)
+
+
 
 # ───────────── CLI: generate PNG + CSV curves ───────────────
 def _cli():
@@ -171,6 +194,8 @@ def _cli():
     plt.savefig(f"SPC_prediction_{T_tar:.0f}C.png", dpi=300)
 
     print(f"[OK] {csv_name} + PNGs written for {T_tar:.0f} °C")
+    g, eta_p, eta_s = get_curve_data(T_tar)
+
 
 # ────────────────────────────────────────────────────────────
 if __name__ == "__main__":  # only runs when executed directly

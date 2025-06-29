@@ -1,114 +1,177 @@
-# -*- coding: utf-8 -*-
-"""
-geometry_screening.py
+# geometry_screening.py
+# -----------------------------------------------------------------------------
+# Candidate-screening helper for sand-plastic screw geometries
+# -----------------------------------------------------------------------------
+from __future__ import annotations
 
-Screen dozens of candidate geometries via a 1D continuum model to estimate local shear rates,
-residence times, and produce a composite ranking score.
-"""
-from typing import List, Dict
+from typing import List, Dict, Union
 import numpy as np
+
 from config import ScrewInputs
 from screw_design import design
-from extruder_design import size_motor
 from rheological_utils import eta_spc
+from mixing_matrix import (
+    dispersive_score,
+    distributive_score,
+    global_mixing_index,
+)
+from flow_solver import solve_dpdx_for_slot
+
+__all__ = [
+    "screen_geometries",
+]
+
+# -----------------------------------------------------------------------------
+# 0) Helpers
+# -----------------------------------------------------------------------------
+
+def kg_h_to_m3_s(Q_kg_h: float, rho: float = 1_000.0) -> float:
+    """Convert mass flow [kg/h] to volumetric flow [m³/s] given density [kg/m³]."""
+    return Q_kg_h / rho / 3_600.0
 
 
-def kg_h_to_m3_s(Q_kg_h: float, rho: float = 1000.0) -> float:
+def get_comp_fill(fill: float, h_mm: float, D_mm: float) -> float:
+    """Compression-zone fill heuristic based on fill × depth.
+
+    * Allow up to 1.5× nominal fill in shallow channels.
+    * Clip to ≤95% when depth > 0.15 × D to avoid over-pressurising.
     """
-    Convert mass flow rate [kg/h] to volumetric flow rate [m^3/s], given density [kg/m^3].
-    """
-    return Q_kg_h / rho / 3600.0
+    base = min(fill * 1.5, 1.0)
+    return min(base, 0.95) if h_mm > 0.15 * D_mm else base
 
-def compute_residence_bins(shear_rates: List[float], times: List[float], bins: int=10) -> np.ndarray:
-    # weight residence probability in each bin proportional to shear* time
-    weights = np.array(shear_rates)*np.array(times)
-    # normalize across zones
-    probs = weights/weights.sum()
-    # assign uniform within each bin segment
-    p_j = np.repeat(probs/bins, bins)
-    return p_j
-def compute_entropy(p_j: np.ndarray) -> float:
-    p = p_j[p_j>0]
-    return -np.sum(p*np.log(p))
-
-
-def zone_shear_rate(Q: float, D_mm: float, h_mm: float) -> float:
-    """
-    Estimate average shear rate in a screw channel zone.
-    Q: volumetric flow rate [m^3/s]
-    D_mm: screw diameter [mm]
-    h_mm: channel depth [mm]
-    Returns shear rate [1/s].
-    """
-    R = D_mm / 2e3  # radius in meters
-    A = 2 * np.pi * R * (h_mm / 1e3)
-    U = Q / A
-    return U / (h_mm / 1e3)
-
-
-def zone_residence_time(L_mm: float, Q: float, D_mm: float, h_mm: float) -> float:
-    """
-    Estimate residence time in a screw channel zone.
-    L_mm: zone length [mm]
-    Q: volumetric flow rate [m^3/s]
-    D_mm: screw diameter [mm]
-    h_mm: channel depth [mm]
-    Returns time [s].
-    """
-    R = D_mm / 2e3
-    A = 2 * np.pi * R * (h_mm / 1e3)
-    U = Q / A
-    L = L_mm / 1e3
-    return L / U
-
+# -----------------------------------------------------------------------------
+# 1) Main routine
+# -----------------------------------------------------------------------------
 
 def screen_geometries(
-    candidates: List[ScrewInputs],
-    Q_kg_h: float,
-    rpm: float
-) -> List[Dict[str, float]]:
-    """
-    Screen a list of ScrewInputs to estimate shear rates and residence times.
+    candidates: List[Union[Dict, ScrewInputs]],
+    *,
+    rpm: float,
+    throughput_kg_h: float,
+    rho_melt: float = 1_200.0,
+) -> List[Dict]:
+    """Enrich *candidates* with flow & mixing metrics and return a ranked list."""
 
-    Returns a list of dicts with keys:
-      - 'name': candidate identifier
-      - 'theta_deg': optimum helix angle [deg]
-      - 'gamma_feed': shear rate in feed zone [1/s]
-      - 'gamma_meter': shear rate in metering zone [1/s]
-      - 't_feed': residence time in feed zone [s]
-      - 't_meter': residence time in metering zone [s]
-      - 'score': composite ranking metric (higher is better)
-    """
-    # Convert to volumetric flow
-    rho = candidates[0].bulk_density
-    Q_m3_s = kg_h_to_m3_s(Q_kg_h, rho)
-    results = []
+    Q_m3_s = kg_h_to_m3_s(throughput_kg_h, rho=rho_melt)
+    results: List[Dict] = []
 
-    for inp in candidates:
+    for idx, cand in enumerate(candidates, 1):
+        # 1) Prepare input object and mapping
+        if isinstance(cand, ScrewInputs):
+            inp = cand
+            cand_map = vars(cand).copy()
+        else:
+            inp = ScrewInputs(**cand)
+            cand_map = dict(cand)
+        cand_map.setdefault("name", f"cand_{idx}")
+
+        # 2) Base geometry and kinematics
         geom = design(inp)
-        # depths from geometry
-        h_f = geom.get('h_f_mm', geom.get('h_f'))
-        h_m = geom.get('h_m_mm', geom.get('h_m'))
-        # zone lengths
-        L_f, L_m = inp.L_feed, inp.L_meter
+        Q_max = geom.get("throughput_max_kg_hr", np.nan)
+        # Actual fill factor based on desired throughput
+        fill_eff = float(throughput_kg_h) / float(Q_max)
 
-        gamma_feed = zone_shear_rate(Q_m3_s, inp.D_mm, h_f)
-        gamma_meter = zone_shear_rate(Q_m3_s, inp.D_mm, h_m)
-        t_feed = zone_residence_time(L_f, Q_m3_s, inp.D_mm, h_f)
-        t_meter = zone_residence_time(L_m, Q_m3_s, inp.D_mm, h_m)
+        D_m = inp.D_mm / 1_000.0                     # [m]
+        V_surf = np.pi * D_m * rpm / 60.0            # [m/s]
+        w_slot = np.pi * D_m                         # [m]
 
-        # composite score: sum of shear rates over total residence time
-        score = (gamma_feed + gamma_meter) / (t_feed + t_meter)
+        # Raw depths [mm]
+        h_f_mm = geom["h_f_mm"]
+        h_m_mm = geom["h_m_mm"]
+        h_c_mm = 0.5 * (h_f_mm + h_m_mm)
 
+        # 3) Effective depths with actual fill factors
+        MIN_DEPTH = 1.0e-4                            # 0.1 mm [m]
+        # Feed zone uses actual fill
+        h_f_eff_m = max((h_f_mm * fill_eff) / 1_000.0, MIN_DEPTH)
+        # Compression zone uses 1.5× fill_eff but capped at 1.0
+        comp_fill = get_comp_fill(fill_eff, h_c_mm, inp.D_mm)
+        h_c_eff_m = max((h_c_mm * comp_fill) / 1_000.0, MIN_DEPTH)
+        # Metering zone always full channel
+        h_m_eff_m = max(h_m_mm / 1_000.0, MIN_DEPTH)
+
+        # 4) Axial velocities & residence times
+        A_feed = 0.9 * w_slot * h_f_eff_m
+        A_comp = 0.9 * w_slot * h_c_eff_m
+        A_metr = 0.9 * w_slot * h_m_eff_m
+
+        V_feed = Q_m3_s / A_feed
+        V_comp = Q_m3_s / A_comp
+        V_metr = Q_m3_s / A_metr
+
+        geom["t_feed_s"] = (inp.L_feed / 1_000.0) / V_feed
+        geom["t_comp_s"] = (inp.L_compression / 1_000.0) / V_comp
+        geom["t_metr_s"] = (inp.L_meter / 1_000.0) / V_metr
+
+        # 5) Solve Couette–Poiseuille flow
+        dpdx_feed, gamma_feed, tau_feed, Q_C_feed, Q_P_feed = solve_dpdx_for_slot(
+            h_f_eff_m, w_slot, V_surf, Q_m3_s, eta_spc
+        )
+        dpdx_comp, gamma_comp, tau_comp, Q_C_comp, Q_P_comp = solve_dpdx_for_slot(
+            h_c_eff_m, w_slot, V_surf, Q_m3_s, eta_spc
+        )
+        dpdx_metr, gamma_metr, tau_metr, Q_C_metr, Q_P_metr = solve_dpdx_for_slot(
+            h_m_eff_m, w_slot, V_surf, Q_m3_s, eta_spc
+        )
+
+        # 6) Actual mass-based fill factors
+        mass_C_feed = Q_C_feed * rho_melt * 3_600.0
+        mass_C_comp = Q_C_comp * rho_melt * 3_600.0
+        real_feed_fill = throughput_kg_h / mass_C_feed
+        real_comp_fill = throughput_kg_h / mass_C_comp
+
+        # 7) Mixing metrics
+        tau_max = max(tau_feed, tau_comp, tau_metr)
+        gamma_int = gamma_feed + gamma_comp + gamma_metr
+
+        disp_ok, disp_meta = dispersive_score(
+            np.array([gamma_feed, gamma_comp, gamma_metr]),
+            np.array([geom["t_feed_s"], geom["t_comp_s"], geom["t_metr_s"]]),
+            eta_fn=eta_spc,
+            tau_crit=3.5e5,
+            gamma_target=80.0,
+        )
+
+        exposure = np.array([gamma_feed, gamma_comp, gamma_metr]) * np.array([
+            geom["t_feed_s"], geom["t_comp_s"], geom["t_metr_s"]
+        ])
+        dist_ok, dist_meta = distributive_score(exposure, cv_target=0.08)
+
+        gmi = global_mixing_index(disp_ok, dist_ok)
+
+        # 8) Aggregate diagnostics
         results.append({
-            'name': getattr(inp, 'name', f"D{inp.D_mm}_CR{inp.compression_ratio}"),
-            'theta_deg': geom['theta_deg'],
-            'gamma_feed': gamma_feed,
-            'gamma_meter': gamma_meter,
-            't_feed': t_feed,
-            't_meter': t_meter,
-            'score': score
+            **cand_map,
+            "h_f_mm": h_f_mm,
+            "h_c_mm": h_c_mm,
+            "h_m_mm": h_m_mm,
+            "fill_eff": fill_eff,
+            "comp_fill": comp_fill,
+            **geom,
+            "dpdx_feed_Pa_m": dpdx_feed,
+            "dpdx_comp_Pa_m": dpdx_comp,
+            "dpdx_metr_Pa_m": dpdx_metr,
+            "gamma_feed_1_s": gamma_feed,
+            "gamma_comp_1_s": gamma_comp,
+            "gamma_metr_1_s": gamma_metr,
+            "tau_feed_Pa": tau_feed,
+            "tau_comp_Pa": tau_comp,
+            "tau_metr_Pa": tau_metr,
+            "Q_C_feed_m3_s": Q_C_feed,
+            "Q_P_feed_m3_s": Q_P_feed,
+            "Q_C_comp_m3_s": Q_C_comp,
+            "Q_P_comp_m3_s": Q_P_comp,
+            "Q_C_metr_m3_s": Q_C_metr,
+            "Q_P_metr_m3_s": Q_P_metr,
+            "real_feed_fill": real_feed_fill,
+            "real_comp_fill": real_comp_fill,
+            "tau_max_Pa": tau_max,
+            "gamma_int": gamma_int,
+            "energy_density": disp_meta.get("energy_density"),
+            "CV_exposure": dist_meta["CV"],
+            "MZMI": dist_meta["MZMI"],
+            "GMI": gmi,
         })
 
-    # sort descending by score
-    return sorted(results, key=lambda r: r['score'], reverse=True)
+    # 9) Sort and return
+    return sorted(results, key=lambda r: (r["GMI"], r["gamma_int"]), reverse=True)
