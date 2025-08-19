@@ -162,20 +162,16 @@ def main() -> None:
     # ------------------------------------------------------------------------
     try:
         motor_data = drive_utils.motor_from_screw(
-        throughput_kg_h=Q_act,
-        rpm=args.rpm,
-        gear_ratio=4.0,      # your real gearbox ratio
-        gear_eff=0.95,       # typical efficiency
-    )
-
+            throughput_kg_h=Q_act,
+            rpm=args.rpm,
+            gear_ratio=4.0,      # your real gearbox ratio
+            gear_eff=0.95,       # typical efficiency
+        )
         torque_screw = float(motor_data["T_screw"])
-        rpm_motor    = float(motor_data["rpm_motor"])
-
-        motor_spec   = drive_utils.select_motor(motor_data, rpm=rpm_motor)
+        motor_spec   = drive_utils.select_motor(motor_data, rpm=args.rpm)
 
         print("\n=== Drive-Train Sizing ===")
         print(f"Screw torque: {torque_screw:.1f} Nm")
-        print(f"Motor rpm: {rpm_motor:.0f} rpm")
         print(f"Motor selection: {motor_spec}")
     except Exception as ex:
         print(f"[drive_utils] skipped motor sizing: {ex}")

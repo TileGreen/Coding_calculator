@@ -20,7 +20,7 @@ class ScrewInputs:
     screw_speed_rpm: float = 15.0    # Screw speed [rpm]
     bulk_density: float = 1150.0     # Pellet bulk density [kg/m^3]
     fill_factor: float = 0.60        # Effective fill fraction
-
+    k_feed_depth: float | None = None   # ← add this line
     # Zone length fractions (must sum to 1.0)
     feed_zone_frac: float = 0.30         # Feed-zone fraction of L
     compression_zone_frac: float = 0.20  # Compression-zone fraction of L

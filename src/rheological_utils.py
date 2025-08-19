@@ -1,3 +1,174 @@
+# from pathlib import Path
+# from functools import lru_cache
+# import argparse
+# import numpy as np
+# import pandas as pd
+# import matplotlib.pyplot as plt
+# import scipy.optimize as opt
+
+# PROJECT_ROOT = Path(__file__).resolve().parent.parent
+# DATA_DIR     = PROJECT_ROOT / "data"
+# DATA_CSV     = DATA_DIR / "wpc_viscosity.csv"
+
+# RHO_PE        = 0.92
+# RHO_WOOD      = 1.35
+# RHO_SAND      = 2.60
+# WT_FRAC_WPC   = 50.0
+# MFI_PE        = 14.5
+# E_A           = 35e3
+# ETA_INT_SAND  = 3.0
+# PHI_M_SAND    = 0.62
+# R_GAS         = 8.314
+
+# # Global safety caps - revised for physical realism
+# MAX_VISCOSITY = 1e5        # Reduced from 1e6 to 100,000 Pa·s (more realistic)
+# MAX_DPDX = 15e6            # Reduced from 20e6 to 15 MPa/m (more realistic)
+# MIN_VISCOSITY = 100        # Increased from 10 to 100 Pa·s (more realistic)
+# MIN_SHEAR_RATE = 0.1       # Minimum shear rate for viscosity calculation
+
+
+
+# def wt2phi(wt, rho_f, rho_m):
+#     w = wt / 100.0
+#     return (w / rho_f) / ((w / rho_f) + ((1 - w) / rho_m))
+
+
+# def kd(phi, eta_int, phi_m):
+#     base = 1.0 - phi / phi_m
+#     return np.where(base > 1e-12, base ** (-eta_int * phi_m), np.inf)
+
+
+# def carreau_yasuda(g, eta0, eta_inf, lam, n, a):
+#     g = np.asarray(g, dtype=float)
+#     lam = np.abs(lam) + 1e-30
+#     with np.errstate(invalid="ignore", over="ignore"):
+#         return eta_inf + (eta0 - eta_inf) * (1.0 + (lam * g) ** a) ** ((n - 1.0) / a)
+
+
+# def mfi_to_eta0(mfi):
+#     return 10 ** (4.6 - 0.5 * np.log10(mfi))
+
+
+# def arrhenius_shift(T, Tref):
+#     return np.exp(-E_A / R_GAS * (1 / (T + 273.15) - 1 / (Tref + 273.15)))
+
+
+# def fit_cy_fixed_eta0(g, eta, eta0_target):
+#     low  = [0.3 * eta0_target, 1.0, 1e-6, 0.10, 0.5]
+#     high = [50.0 * eta0_target, 5e3, 1e3, 1.00, 5.0]
+#     p0 = [eta0_target,
+#           max(eta[-1] * 0.5, 1.1 * low[1]),
+#           1.0 / g[np.argmin(eta)],
+#           0.3,
+#           2.0]
+#     p0 = np.clip(p0, low, high)
+#     popt, _ = opt.curve_fit(carreau_yasuda, g, eta, p0=p0, bounds=(low, high), maxfev=30000)
+#     return popt
+
+
+# @lru_cache(maxsize=None)
+# def _build_models(T: float):
+#     df      = pd.read_csv(DATA_CSV, header=None, names=["gdot", "eta_wpc"])
+#     phi_wpc = wt2phi(WT_FRAC_WPC, RHO_WOOD, RHO_PE)
+
+#     eta0_MFI  = mfi_to_eta0(MFI_PE)
+#     eta_guess = df["eta_wpc"] / kd(phi_wpc, 3.0, max(phi_wpc + 0.05, 0.55))
+#     cy_195    = fit_cy_fixed_eta0(df["gdot"].values, eta_guess.values, eta0_MFI)
+#     eta0_195, eta_inf, lam_195, n_cy, a_cy = cy_195
+
+#     aT     = arrhenius_shift(T, 195.0)
+#     eta0_T = eta0_195 * aT
+#     lam_T  = lam_195  * aT
+#     cy_T   = (eta0_T, eta_inf, lam_T, n_cy, a_cy)
+
+#     poly_T = lambda g: carreau_yasuda(np.asarray(g), *cy_T)
+#     eta_r_spc = kd(phi_wpc, ETA_INT_SAND, PHI_M_SAND)
+#     spc_T     = lambda g: eta_r_spc * poly_T(np.asarray(g))
+#     return poly_T, spc_T
+
+
+# def eta_poly(gdot, *, T: float = 195.0):
+#     poly, _ = _build_models(float(T))
+#     return poly(gdot)
+
+
+# def eta_spc(gdot, *, T: float = 195.0):
+#     # _, spc = _build_models(float(T))
+#     # g = np.asarray(gdot, dtype=float)
+    
+#     # # Apply minimum shear rate to avoid unrealistic values
+#     # g = np.maximum(g, MIN_SHEAR_RATE)
+    
+#     # # Core Carreau-Yasuda prediction
+#     # eta = spc(g).copy()
+    
+#     # # Apply reasonable limits
+#     # eta = np.clip(eta, MIN_VISCOSITY, MAX_VISCOSITY)
+    
+#     # # Match scalar/array semantics
+#     # if np.isscalar(gdot):
+#     #     return float(eta)
+#     # return eta
+#     # Use a simplified model based on experimental data for sand-filled polymers
+#     g = np.asarray(gdot, dtype=float)
+    
+#     # Apply minimum shear rate
+#     g = np.maximum(g, MIN_SHEAR_RATE)
+    
+#     # Power law model for sand-filled PP/PE (typical values)
+#     # η = K * γ^(n-1)
+#     K = 15000  # Consistency index [Pa·s^n]
+#     n = 0.35   # Power law index
+    
+#     # Calculate viscosity
+#     eta = K * g**(n-1)
+    
+#     # Apply reasonable limits
+#     eta = np.clip(eta, MIN_VISCOSITY, MAX_VISCOSITY)
+    
+#     return float(eta) if np.isscalar(gdot) else eta
+
+
+# def get_curve_data(T: float = 195.0):
+#     df = pd.read_csv(DATA_CSV, header=None, names=["gdot", "eta_wpc"])
+#     g = df["gdot"].values
+#     return g, eta_poly(g, T=T), eta_spc(g, T=T)
+
+
+# def _cli():
+#     ap = argparse.ArgumentParser()
+#     ap.add_argument("--T", type=float, default=195.0)
+#     T_tar = ap.parse_args().T
+
+#     df = pd.read_csv(DATA_CSV, header=None, names=["gdot", "eta_wpc"])
+#     df["eta_poly_T"] = eta_poly(df["gdot"], T=T_tar)
+#     df["eta_spc_T"]  = eta_spc(df["gdot"],  T=T_tar)
+
+#     csv_name = f"PE_SPC_viscosity_{T_tar:.0f}C.csv"
+#     df[["gdot", "eta_poly_T", "eta_spc_T"]].to_csv(csv_name, index=False)
+
+#     plt.figure(figsize=(5, 3.5))
+#     plt.loglog(df["gdot"], df["eta_poly_T"], label=f"PE @ {T_tar:.0f} °C")
+#     plt.xlabel("Shear rate [1/s]")
+#     plt.ylabel("Viscosity [Pa·s]")
+#     plt.grid(True, ls="--", alpha=.3)
+#     plt.tight_layout()
+#     plt.savefig(f"PE_viscosity_{T_tar:.0f}C.png", dpi=300)
+
+#     plt.figure(figsize=(5.8, 3.5))
+#     plt.loglog(df["gdot"], df["eta_wpc"],  'o-', ms=5, label="WPC 50 wt % wood @195 °C")
+#     plt.loglog(df["gdot"], df["eta_spc_T"], 's--', ms=5, label=f"SPC (φ≈{wt2phi(WT_FRAC_WPC, RHO_WOOD, RHO_PE):.2f}) @ {T_tar:.0f} °C")
+#     plt.xlabel("Shear rate [1/s]")
+#     plt.ylabel("Viscosity [Pa·s]")
+#     plt.grid(True, ls="--", alpha=.3)
+#     plt.tight_layout()
+#     plt.savefig(f"SPC_prediction_{T_tar:.0f}C.png", dpi=300)
+
+#     print(f"[OK] {csv_name} + PNGs written for {T_tar:.0f} °C")
+
+
+# if __name__ == "__main__":
+#     _cli()
 #!/usr/bin/env python3
 """
 viscosity_curve_v3.py

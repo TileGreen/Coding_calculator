@@ -17,7 +17,7 @@ def _channel_depths(D_mm: float, k_feed: float, CR: float):
     h_m = h_f / CR            # metering depth
     return h_f, h_m
 # ──────────────────────────────────────────────────────────────────────────────
-def design(inp: ScrewInputs = ScrewInputs(), *, k_feed_depth: float = 0.15) -> Dict[str, float]:
+def design(inp: ScrewInputs = ScrewInputs(), *, k_feed_depth: float |None =None) -> Dict[str, float]:
     """
     Compute basic screw layout + projected throughput.
 
@@ -31,8 +31,12 @@ def design(inp: ScrewInputs = ScrewInputs(), *, k_feed_depth: float = 0.15) -> D
     feed_rate_kg_hr: float | None = None
     D_m = inp.D_mm / 1000.0
     theta_deg = _optimum_helix(inp.power_law_index_n)
-    h_f_mm, h_m_mm = _channel_depths(inp.D_mm, k_feed_depth, inp.compression_ratio)
-
+    k_f = (inp.k_feed_depth
+       if inp.k_feed_depth is not None
+       else (0.15 if k_feed_depth is None else k_feed_depth))
+   # h_f_mm, h_m_mm = _channel_depths(inp.D_mm, k_feed_depth, inp.compression_ratio)
+    h_f_mm=k_f * inp.D_mm
+    h_m_mm= h_f_mm / inp.compression_ratio
     # simple open-channel estimate:
     channel_area_m2 = pi * D_m * (h_m_mm / 1000.0)
     Q_kg_s = (inp.bulk_density * channel_area_m2 *
@@ -44,7 +48,7 @@ def design(inp: ScrewInputs = ScrewInputs(), *, k_feed_depth: float = 0.15) -> D
     else:
         phi_eff = inp.fill_factor          # default (likely 0.9–1.0)
         Q_actual_hr = Q_kg_hr
-
+    print(f"[DEBUG] k_f={k_f:.3f}  h_f={h_f_mm:.2f} mm")
 
     return {
         "theta_deg": theta_deg,
