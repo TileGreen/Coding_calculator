@@ -45,7 +45,7 @@ def _parse_args() -> argparse.Namespace:
                    help="Channel compression_ratio h_f/h_m (default 3)")
 
     # Operating conditions
-    p.add_argument("--rpm", "-n", type=float, default=25,
+    p.add_argument("--rpm", "-n", type=float, default=90,
                    help="Screw speed [rev/min] (default 90)")
     p.add_argument("--feed-rate", type=float, default=90,
                    help="Throughput [kg/h]; omit for flood-fed")
@@ -162,16 +162,20 @@ def main() -> None:
     # ------------------------------------------------------------------------
     try:
         motor_data = drive_utils.motor_from_screw(
-            throughput_kg_h=Q_act,
-            rpm=args.rpm,
-            gear_ratio=4.0,      # your real gearbox ratio
-            gear_eff=0.95,       # typical efficiency
-        )
+        throughput_kg_h=Q_act,
+        rpm=args.rpm,
+        gear_ratio=4.0,      # your real gearbox ratio
+        gear_eff=0.95,       # typical efficiency
+    )
+
         torque_screw = float(motor_data["T_screw"])
-        motor_spec   = drive_utils.select_motor(motor_data, rpm=args.rpm)
+        rpm_motor    = float(motor_data["rpm_motor"])
+
+        motor_spec   = drive_utils.select_motor(motor_data, rpm=rpm_motor)
 
         print("\n=== Drive-Train Sizing ===")
         print(f"Screw torque: {torque_screw:.1f} Nm")
+        print(f"Motor rpm: {rpm_motor:.0f} rpm")
         print(f"Motor selection: {motor_spec}")
     except Exception as ex:
         print(f"[drive_utils] skipped motor sizing: {ex}")
