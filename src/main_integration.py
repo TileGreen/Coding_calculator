@@ -45,7 +45,7 @@ def _parse_args() -> argparse.Namespace:
                    help="Channel compression_ratio h_f/h_m (default 3)")
 
     # Operating conditions
-    p.add_argument("--rpm", "-n", type=float, default=90,
+    p.add_argument("--rpm", "-n", type=float, default=70,
                    help="Screw speed [rev/min] (default 90)")
     p.add_argument("--feed-rate", type=float, default=90,
                    help="Throughput [kg/h]; omit for flood-fed")

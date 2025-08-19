@@ -11,7 +11,7 @@
   feed_zone_frac: 0.30
   compression_zone_frac: 0.20
   meter_zone_frac: 0.50
-  screw_speed_rpm: 5
+  screw_speed_rpm: 25
   bulk_density: 1150.0
   fill_factor: 0.60
     

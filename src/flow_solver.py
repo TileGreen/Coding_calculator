@@ -234,16 +234,20 @@ def solve_dpdx_for_slot(
     """
     # 1) Pure drag‐only (Couette) capacity
     Q_C = w * h * V / 2.0
-
+    dpdx = 0.0
+    gamma_init = max(1e-6, V/h)   # avoid div by zero
+    eta = _sanitize_eta(eta_fn(gamma_init))
+    
     # If Q ≃ Q_C, skip pressure solve
     if abs(Q - Q_C) < tol * max(Q_C, 1e-12):
-        gamma_w = V / h
+        eta  = _sanitize_eta(eta_fn(V / h))
+        gamma_w = V / h + (h / 2.0) * abs(dpdx) / max(eta, 1.0e-12)
+       
         tau_w   = _sanitize_eta(eta_fn(gamma_w)) * gamma_w
         return 0.0, gamma_w, tau_w, Q_C, 0.0
 
     # 2) Initial guess: no pressure gradient, viscosity at simple shear
-    dpdx = 0.0
-    eta  = _sanitize_eta(eta_fn(V / h))
+   
 
     # 3) Outer loop: update viscosity based on wall shear → re-solve dpdx
     for _ in range(max_iter):
