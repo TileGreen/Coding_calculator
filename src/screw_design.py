@@ -6,6 +6,9 @@ Nothing executes on import; call design().
 from math import pi
 from config import ScrewInputs
 from typing import Dict
+import logging
+logger = logging.getLogger(__name__)
+
 
 # ──────────────────────────────────────────────────────────────────────────────
 def _optimum_helix(n: float) -> float:
@@ -17,7 +20,7 @@ def _channel_depths(D_mm: float, k_feed: float, CR: float):
     h_m = h_f / CR            # metering depth
     return h_f, h_m
 # ──────────────────────────────────────────────────────────────────────────────
-def design(inp: ScrewInputs = ScrewInputs(), *, k_feed_depth: float |None =None) -> Dict[str, float]:
+def design(inp: ScrewInputs = ScrewInputs(), *, k_feed_depth: float |None =None,debug: bool=False) -> Dict[str, float]:
     """
     Compute basic screw layout + projected throughput.
 
@@ -48,7 +51,9 @@ def design(inp: ScrewInputs = ScrewInputs(), *, k_feed_depth: float |None =None)
     else:
         phi_eff = inp.fill_factor          # default (likely 0.9–1.0)
         Q_actual_hr = Q_kg_hr
-    print(f"[DEBUG] k_f={k_f:.3f}  h_f={h_f_mm:.2f} mm")
+    if debug:
+        logger.setLevel(logging.DEBUG)
+    logger.debug(f"k_f={k_f:.3f}  h_f={h_f_mm:.2f} mm")
 
     return {
         "theta_deg": theta_deg,

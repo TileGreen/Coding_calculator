@@ -37,17 +37,17 @@ def _parse_args() -> argparse.Namespace:
     )
 
     # Geometry overrides
-    p.add_argument("--diameter", "-D", type=float, default=125.0,
+    p.add_argument("--diameter", "-D", type=float, default=85,
                    help="Screw diameter D_mm [mm] (default 125)")
-    p.add_argument("--LD", type=float, default=17.0,
+    p.add_argument("--LD", type=float, default=44.0,
                    help="Length-to-diameter ratio L_over_D (default 17)")
-    p.add_argument("--CR", "--compression-ratio", type=float, default=3.0,
+    p.add_argument("--CR", "--compression-ratio", type=float, default=3,
                    help="Channel compression_ratio h_f/h_m (default 3)")
 
     # Operating conditions
-    p.add_argument("--rpm", "-n", type=float, default=70,
+    p.add_argument("--rpm", "-n", type=float, default=10,
                    help="Screw speed [rev/min] (default 90)")
-    p.add_argument("--feed-rate", type=float, default=90,
+    p.add_argument("--feed-rate", type=float, default=500,
                    help="Throughput [kg/h]; omit for flood-fed")
 
     # Output control
@@ -76,9 +76,8 @@ def main() -> None:
         screw_speed_rpm=args.rpm,
     )
     ref_geom = design(ref_input)
-    Q_max = ref_geom.get("throughput_max_kg_hr", float("inf"))
-    Q_act = args.feed_rate if args.feed_rate is not None else Q_max
-    Q_act = min(Q_act, Q_max)
+    Q_ref_max = ref_geom.get("throughput_max_kg_hr", float("inf"))
+    Q_req = args.feed_rate if args.feed_rate is not None else Q_ref_max
 
     # ------------------------------------------------------------------------
     # 3) Load raw candidate dicts & override
@@ -107,7 +106,7 @@ def main() -> None:
     ranked = screen_geometries(
         dict_cands,
         rpm=args.rpm,
-        throughput_kg_h=Q_act,
+        throughput_kg_h=Q_req,
         rho_melt=1_200.0,
     )
 
@@ -160,18 +159,25 @@ def main() -> None:
     # ------------------------------------------------------------------------
     # 8) Drive-train sizing
     # ------------------------------------------------------------------------
+    # 8) Drive-train sizing
     try:
+    # 1) Estimate screw torque from throughput (empirical k_v)
         motor_data = drive_utils.motor_from_screw(
-            throughput_kg_h=Q_act,
-            rpm=args.rpm,
-            gear_ratio=4.0,      # your real gearbox ratio
-            gear_eff=0.95,       # typical efficiency
-        )
+        throughput_kg_h=Q_req,
+        rpm=args.rpm,        # screw rpm
+        gear_ratio=4.0,      # current gearbox ratio
+        gear_eff=0.95,       # typical efficiency
+    )
+
         torque_screw = float(motor_data["T_screw"])
-        motor_spec   = drive_utils.select_motor(motor_data, rpm=args.rpm)
+        P_screw_kW   = motor_data["P_screw_W"] / 1_000.0
+
+    # 2) Select motor using the **motor-side rpm** from motor_data
+        motor_spec = drive_utils.select_motor(motor_data)  # <-- no rpm=...
 
         print("\n=== Drive-Train Sizing ===")
-        print(f"Screw torque: {torque_screw:.1f} Nm")
+        print(f"Screw torque (empirical): {torque_screw:.1f} Nm")
+        print(f"Screw power: {P_screw_kW:.2f} kW")
         print(f"Motor selection: {motor_spec}")
     except Exception as ex:
         print(f"[drive_utils] skipped motor sizing: {ex}")
@@ -182,7 +188,7 @@ def main() -> None:
     if args.out:
         out_data = {
             "reference_geometry": ref_geom,
-            "Q_actual_kg_h": Q_act,
+            "Q_requested_kg_h": Q_req,
             "top_candidates": ranked[: args.top],
             "drive_train": {"torque_Nm": torque_screw, "motor_spec": motor_spec},
         }

@@ -16,11 +16,11 @@ class ScrewInputs:
     D_mm: float = 90.0              # Screw outer diameter [mm]
     L_over_D: float = 25.0          # Total length-to-diameter ratio
     compression_ratio: float = 3.0  # Compression ratio (h_f/h_m)
-    power_law_index_n: float = 0.4   # Viscosity power-law index (n)
-    screw_speed_rpm: float = 15.0    # Screw speed [rpm]
-    bulk_density: float = 1150.0     # Pellet bulk density [kg/m^3]
-    fill_factor: float = 0.60        # Effective fill fraction
-    k_feed_depth: float | None = None   # ← add this line
+    power_law_index_n: float = 0.4  # Viscosity power-law index (n)
+    screw_speed_rpm: float = 15.0   # Screw speed [rpm]
+    bulk_density: float = 1150.0    # Pellet bulk density [kg/m^3]
+    fill_factor: float = 0.60       # Effective fill fraction
+    k_feed_depth: float | None = None
     # Zone length fractions (must sum to 1.0)
     feed_zone_frac: float = 0.30         # Feed-zone fraction of L
     compression_zone_frac: float = 0.20  # Compression-zone fraction of L
@@ -46,16 +46,25 @@ class ScrewInputs:
         """Metering-zone length [mm]."""
         return self.barrel_length_mm * self.meter_zone_frac
 
+
 # ──────────────────────────────────────────────────────────────────────────────
 # Motor sizing inputs
 # ──────────────────────────────────────────────────────────────────────────────
 @dataclass
 class MotorSizingInputs:
-    kv: float = 0.045                 # Motor constant [V/(rad/s)]
+    throughput_power_coeff: float = 0.045
+    # Legacy alias kept only for backward compatibility with older snippets.
+    # This is NOT a motor voltage constant; it maps throughput to screw power.
+    kv: float | None = None
     screw_rpm: float = 80.0           # Design screw speed [rpm]
     melt_density_kg_m3: float = 1500.0
     specific_torque_Nm_cm3: float = 12.0
     safety_factor: float = 1.15
+
+    def __post_init__(self) -> None:
+        if self.kv is not None:
+            self.throughput_power_coeff = self.kv
+
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Utility: load candidates for screening from a YAML file

@@ -5,13 +5,13 @@
 # Optional fields: power_law_index_n, screw_speed_rpm, bulk_density, fill_factor
 
 - name: "Standard_125mm"
-  D_mm: 75
-  L_over_D: 30
+  D_mm: 200
+  L_over_D: 40
   compression_ratio: 3.0
   feed_zone_frac: 0.30
   compression_zone_frac: 0.20
   meter_zone_frac: 0.50
-  screw_speed_rpm: 25
+  screw_speed_rpm: 10
   bulk_density: 1150.0
   fill_factor: 0.60
     

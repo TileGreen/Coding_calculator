@@ -20,11 +20,11 @@
 # PHI_M_SAND    = 0.62
 # R_GAS         = 8.314
 
-# # Global safety caps - revised for physical realism
-# MAX_VISCOSITY = 1e5        # Reduced from 1e6 to 100,000 Pa·s (more realistic)
-# MAX_DPDX = 15e6            # Reduced from 20e6 to 15 MPa/m (more realistic)
-# MIN_VISCOSITY = 100        # Increased from 10 to 100 Pa·s (more realistic)
-# MIN_SHEAR_RATE = 0.1       # Minimum shear rate for viscosity calculation
+# Global safety caps - revised for physical realism
+MAX_VISCOSITY = 1e5        # Reduced from 1e6 to 100,000 Pa·s (more realistic)
+MAX_DPDX = 15e6            # Reduced from 20e6 to 15 MPa/m (more realistic)
+MIN_VISCOSITY = 100        # Increased from 10 to 100 Pa·s (more realistic)
+MIN_SHEAR_RATE = 0.1       # Minimum shear rate for viscosity calculation
 
 
 
@@ -312,7 +312,8 @@ def eta_spc(gdot, *, T: float = 195.0):
         n = np.log(eta_ref[0] / eta_ref[1]) / np.log(10.0)     # apparent index
         eta_low = eta_ref[0] * (np.maximum(g, 0.01) / 1.0) ** (n - 1)
         eta[low] = eta_low[low]
-
+    # Apply global viscosity bounds
+    eta = np.clip(eta, MIN_VISCOSITY, MAX_VISCOSITY)
     return float(eta) if np.isscalar(gdot) else eta
 
 def get_curve_data(T: float = 195.0):
