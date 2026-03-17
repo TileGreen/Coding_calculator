@@ -32,7 +32,7 @@ class FlowSolveResult:
 # ───────────── Global safety caps (tune as needed) ─────────────
 
 MAX_VISCOSITY: float = 1e5      # Pa·s
-MIN_VISCOSITY: float = 1e2      # Pa·s
+MIN_VISCOSITY: float = 5.0      # Pa·s
 MIN_SHEAR_RATE: float = 0.1     # 1/s
 MAX_DPDX: float = 15e6          # Pa/m
 

@@ -3,38 +3,35 @@
 # Each entry defines a distinct ScrewInputs configuration. Only the specified fields will override defaults.
 # Mandatory fields: D_mm, L_over_D, compression_ratio, feed_zone_frac, compression_zone_frac, meter_zone_frac
 # Optional fields: power_law_index_n, screw_speed_rpm, bulk_density, fill_factor
+- name: cand_A_baseline
+  D_mm: 85
+  L_over_D: 44
+  compression_ratio: 3
+  h_f_mm: 9.0
+  h_m_mm: 3.0
+  feed_zone_frac: 0.34
+  compression_zone_frac: 0.18
+  meter_zone_frac: 0.48
+  fill_factor: 0.62
 
-- name: "Standard_125mm"
-  D_mm: 200
-  L_over_D: 40
-  compression_ratio: 3.0
-  feed_zone_frac: 0.30
-  compression_zone_frac: 0.20
-  meter_zone_frac: 0.50
-  screw_speed_rpm: 10
-  bulk_density: 1150.0
-  fill_factor: 0.60
-    
-- name: "Deep_100mm"
-  D_mm: 100
-  L_over_D: 26
-  compression_ratio: 4.0
-  feed_zone_frac: 0.33
+- name: cand_B_aggressive
+  D_mm: 85
+  L_over_D: 44
+  compression_ratio: 3
+  h_f_mm: 10.0
+  h_m_mm: 3.2
+  feed_zone_frac: 0.35
   compression_zone_frac: 0.17
-  meter_zone_frac: 0.50
-  screw_speed_rpm: 90
-  bulk_density: 1200.0
-  fill_factor: 0.65
+  meter_zone_frac: 0.48
+  fill_factor: 0.64
 
-- name: "HighSpeed_100mm"
-  D_mm: 100
-  L_over_D: 28
-  compression_ratio: 2.5
-  feed_zone_frac: 0.28
-  compression_zone_frac: 0.22
-  meter_zone_frac: 0.50
-  screw_speed_rpm: 90
-  bulk_density: 1100.0
-  fill_factor: 0.55
-
-
+- name: cand_C_balanced_long_meter
+  D_mm: 85
+  L_over_D: 48
+  compression_ratio: 3
+  h_f_mm: 9.0
+  h_m_mm: 3.0
+  feed_zone_frac: 0.30
+  compression_zone_frac: 0.18
+  meter_zone_frac: 0.52
+  fill_factor: 0.62
